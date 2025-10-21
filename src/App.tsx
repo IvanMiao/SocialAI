@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Waves, Calendar, BarChart3, Sparkles, Send, Image, TrendingUp, Zap, Target, Activity } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Waves, Calendar, BarChart3, Send, TrendingUp, Zap, Target, Activity } from 'lucide-react';
 
 interface GeneratedImage {
   id: number;
@@ -34,6 +34,11 @@ const Wave = () => {
     viralScore: 0,
     emotionalImpact: {}
   });
+  
+  // 新增：用户体验改进状态
+  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, variant: '' });
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
+  const [isScheduling, setIsScheduling] = useState<number | null>(null);
 
   const API_KEY = 'sk-NG0omZzRFsYEbedC3F8fuQ';
 
@@ -140,11 +145,27 @@ const Wave = () => {
       `${prompt} - variant C with bold flowing composition`
     ];
 
-    for (let i = 0; i < variants.length; i++) {
-      await generateWithBlackbox(variants[i]);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    setGenerationProgress({ current: 0, total: variants.length, variant: '' });
+    
+    try {
+      for (let i = 0; i < variants.length; i++) {
+        setGenerationProgress({ 
+          current: i + 1, 
+          total: variants.length, 
+          variant: `Variant ${String.fromCharCode(65 + i)}` // A, B, C
+        });
+        
+        await generateWithBlackbox(variants[i]);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      showToast('success', `🌊 Successfully generated ${variants.length} wave variants!`);
+    } catch (error) {
+      showToast('error', 'Failed to generate some variants. Check console for details.');
+    } finally {
+      setIsGenerating(false);
+      setGenerationProgress({ current: 0, total: 0, variant: '' });
     }
-    setIsGenerating(false);
   };
 
   const calculateAnalytics = (promptText: string) => {
@@ -164,18 +185,41 @@ const Wave = () => {
   };
 
   const schedulePost = (image: GeneratedImage) => {
-    const scheduledDate = new Date();
-    scheduledDate.setHours(scheduledDate.getHours() + Math.floor(Math.random() * 48));
+    setIsScheduling(image.id);
     
-    const newPost = {
-      ...image,
-      scheduledFor: scheduledDate.toISOString(),
-      status: 'scheduled'
-    };
-    
-    setScheduledPosts(prev => [...prev, newPost]);
-    alert(`🌊 Wave scheduled for ${scheduledDate.toLocaleDateString()} at ${scheduledDate.toLocaleTimeString()}`);
+    // 模拟调度过程
+    setTimeout(() => {
+      const scheduledDate = new Date();
+      scheduledDate.setHours(scheduledDate.getHours() + Math.floor(Math.random() * 48));
+      
+      const newPost = {
+        ...image,
+        scheduledFor: scheduledDate.toISOString(),
+        status: 'scheduled'
+      };
+      
+      setScheduledPosts(prev => [...prev, newPost]);
+      setIsScheduling(null);
+      showToast('success', `🌊 Wave scheduled for ${scheduledDate.toLocaleDateString()} at ${scheduledDate.toLocaleTimeString()}`);
+    }, 800);
   };
+  
+  // Toast通知系统
+  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    setToastMessage({ type, message });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+  
+  // 当成功生成图片时显示通知
+  useEffect(() => {
+    if (generatedImages.length > 0 && !isGenerating && generationProgress.total === 0) {
+      // 只在单个生成完成时显示（不是A/B测试）
+      const latestImage = generatedImages[0];
+      if (latestImage && Date.now() - latestImage.id < 2000) {
+        showToast('success', '🌊 Wave created successfully!');
+      }
+    }
+  }, [generatedImages.length]);
 
   const togglePlatform = (platformId: string) => {
     setSelectedPlatforms(prev => 
@@ -187,6 +231,48 @@ const Wave = () => {
 
   return (
     <div className="min-h-screen bg-black text-white relative overflow-hidden">
+      {/* Toast通知 */}
+      {toastMessage && (
+        <div className={`fixed top-6 right-6 z-50 px-6 py-4 rounded-xl border-2 shadow-2xl backdrop-blur-xl animate-slide-in-right ${
+          toastMessage.type === 'success' ? 'bg-cyan-500/20 border-cyan-400 shadow-cyan-500/50' :
+          toastMessage.type === 'error' ? 'bg-red-500/20 border-red-400 shadow-red-500/50' :
+          'bg-blue-500/20 border-blue-400 shadow-blue-500/50'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full animate-pulse ${
+              toastMessage.type === 'success' ? 'bg-cyan-400' :
+              toastMessage.type === 'error' ? 'bg-red-400' : 'bg-blue-400'
+            }`}></div>
+            <p className="font-bold text-sm">{toastMessage.message}</p>
+            <button 
+              onClick={() => setToastMessage(null)}
+              className="ml-4 text-gray-400 hover:text-white transition-colors"
+            >✕</button>
+          </div>
+        </div>
+      )}
+      
+      {/* A/B测试进度指示器 */}
+      {isGenerating && generationProgress.total > 0 && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-br from-cyan-950/90 to-blue-950/90 backdrop-blur-xl px-8 py-4 rounded-xl border-2 border-cyan-400/50 shadow-2xl shadow-cyan-500/50">
+          <div className="flex items-center gap-4">
+            <div className="w-8 h-8 border-3 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
+            <div>
+              <p className="font-black text-sm text-cyan-300 uppercase">Creating {generationProgress.variant}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="w-48 h-2 bg-black/50 rounded-full overflow-hidden border border-cyan-500/30">
+                  <div 
+                    className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
+                    style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <span className="text-xs font-mono text-gray-400">{generationProgress.current}/{generationProgress.total}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Animated Wave Background */}
       <div className="absolute inset-0 opacity-10">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -313,13 +399,31 @@ const Wave = () => {
               
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-bold mb-2 text-cyan-300 uppercase tracking-wide">Your Vision</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-cyan-300 uppercase tracking-wide">Your Vision</label>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-mono ${prompt.length > 200 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                        {prompt.length} chars
+                      </span>
+                      {prompt.length > 0 && (
+                        <button
+                          onClick={() => setPrompt('')}
+                          className="text-xs text-gray-500 hover:text-cyan-400 transition-colors px-2 py-1 rounded hover:bg-cyan-500/10"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Describe your content vision... we'll create the waves 🌊"
-                    className="w-full h-28 bg-black/50 rounded-xl px-4 py-3 border-2 border-cyan-500/30 focus:border-cyan-400 focus:outline-none resize-none font-mono text-sm placeholder-gray-500"
+                    className="w-full h-28 bg-black/50 rounded-xl px-4 py-3 border-2 border-cyan-500/30 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/20 resize-none font-mono text-sm placeholder-gray-500 transition-all"
                   />
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 <span className="text-cyan-400/70">Pro tip:</span> Be specific with colors, style, and mood for better results
+                  </p>
                 </div>
 
                 {/* Preset Prompts */}
@@ -360,14 +464,22 @@ const Wave = () => {
                   </div>
                 </div>
 
+                {/* 平台选择提示 */}
+                {selectedPlatforms.length === 0 && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 flex items-center gap-3">
+                    <span className="text-yellow-400 text-xl">⚠️</span>
+                    <p className="text-sm text-yellow-300 font-bold">Select at least one platform to continue</p>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={() => generateWithBlackbox(prompt)}
-                    disabled={!prompt || isGenerating}
+                    disabled={!prompt || isGenerating || selectedPlatforms.length === 0}
                     className="flex-1 bg-gradient-to-r from-cyan-500 via-blue-600 to-cyan-500 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black text-lg transition-all flex items-center justify-center gap-3 shadow-lg shadow-cyan-500/50 hover:shadow-cyan-400/60 uppercase tracking-wide"
                   >
-                    {isGenerating ? (
+                    {isGenerating && generationProgress.total === 0 ? (
                       <>
                         <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                         CREATING WAVE...
@@ -381,32 +493,63 @@ const Wave = () => {
                   </button>
                   <button
                     onClick={generateABVariants}
-                    disabled={!prompt || isGenerating}
+                    disabled={!prompt || isGenerating || selectedPlatforms.length === 0}
                     className="bg-black/60 hover:bg-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-4 rounded-xl font-black border-2 border-cyan-500/50 hover:border-cyan-400 transition-all flex items-center gap-2 uppercase"
                   >
-                    <TrendingUp className="w-5 h-5" />
-                    A/B WAVE
+                    {isGenerating && generationProgress.total > 0 ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        GENERATING...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="w-5 h-5" />
+                        A/B WAVE
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* 空状态提示 */}
+            {generatedImages.length === 0 && !isGenerating && (
+              <div className="bg-gradient-to-br from-cyan-950/30 to-blue-950/30 backdrop-blur-xl rounded-2xl p-12 border-2 border-cyan-500/20 text-center">
+                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-full flex items-center justify-center border-2 border-cyan-500/30">
+                  <Waves className="w-10 h-10 text-cyan-400/50" />
+                </div>
+                <h3 className="text-2xl font-black mb-3 text-gray-300">No Waves Yet</h3>
+                <p className="text-gray-400 mb-6 max-w-md mx-auto">
+                  Create your first wave by entering a prompt above and clicking "MAKE A WAVE"
+                </p>
+                <div className="flex gap-2 justify-center text-xs text-cyan-400/70">
+                  <span>💡 Tip:</span>
+                  <span>Try using preset prompts for inspiration</span>
+                </div>
+              </div>
+            )}
+
             {/* Generated Images Gallery */}
             {generatedImages.length > 0 && (
-              <div className="bg-gradient-to-br from-cyan-950/50 to-blue-950/50 backdrop-blur-xl rounded-2xl p-6 border-2 border-cyan-500/30">
+              <div className="bg-gradient-to-br from-cyan-950/50 to-blue-950/50 backdrop-blur-xl rounded-2xl p-6 border-2 border-cyan-500/30 animate-fade-in">
                 <h2 className="text-2xl font-black mb-5 text-cyan-300 uppercase flex items-center gap-2">
                   <Waves className="w-6 h-6" />
-                  Your Waves
+                  Your Waves ({generatedImages.length})
                 </h2>
                 <div className="grid grid-cols-3 gap-4">
-                  {generatedImages.map(image => (
-                    <div key={image.id} className="group relative bg-black/60 rounded-xl overflow-hidden border-2 border-cyan-500/30 hover:border-cyan-400 transition-all hover:shadow-2xl hover:shadow-cyan-500/40 transform hover:scale-105">
+                  {generatedImages.map((image, index) => (
+                    <div 
+                      key={image.id} 
+                      className="group relative bg-black/60 rounded-xl overflow-hidden border-2 border-cyan-500/30 hover:border-cyan-400 transition-all hover:shadow-2xl hover:shadow-cyan-500/40 transform hover:scale-105 animate-fade-in"
+                      style={{ animationDelay: `${index * 0.1}s` }}
+                    >
                       <img
                         src={image.url}
                         alt={image.prompt}
-                        className="w-full h-52 object-cover"
+                        className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-110"
+                        loading="lazy"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60"></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
                       <div className="relative p-4">
                         <p className="text-xs text-gray-300 mb-3 line-clamp-2 font-mono">{image.prompt}</p>
                         <div className="flex flex-wrap gap-2 mb-3">
@@ -418,10 +561,20 @@ const Wave = () => {
                         </div>
                         <button
                           onClick={() => schedulePost(image)}
-                          className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 py-2.5 rounded-lg text-sm font-black uppercase transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/50"
+                          disabled={isScheduling === image.id}
+                          className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-70 py-2.5 rounded-lg text-sm font-black uppercase transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/50"
                         >
-                          <Send className="w-4 h-4" />
-                          RIDE IT
+                          {isScheduling === image.id ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              SCHEDULING...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4" />
+                              RIDE IT
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
